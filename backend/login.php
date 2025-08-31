@@ -1,32 +1,28 @@
 <?php
-session_start();
-include 'db.php';
+include "db.php";
+header("Content-Type: application/json");
 
-$data = json_decode(file_get_contents("php://input"));
+$data = json_decode(file_get_contents("php://input"), true);
+if (!isset($data["email"], $data["password"])) {
+    http_response_code(400);
+    echo json_encode(["error" => "Missing fields"]);
+    exit();
+}
 
-$email = $data->email;
-$password = $data->password;
+$email = $data["email"];
+$password = $data["password"];
 
-$stmt = $conn->prepare("SELECT * FROM users WHERE email=? AND password=?");
-$stmt->bind_param("ss", $email, $password);
+$stmt = $conn->prepare("SELECT id, username, password FROM users WHERE email=?");
+$stmt->bind_param("s", $email);
 $stmt->execute();
-$result = $stmt->get_result();
+$stmt->bind_result($id, $username, $hashed);
+$stmt->fetch();
+$stmt->close();
 
-if ($result->num_rows === 1) {
-    $user = $result->fetch_assoc();
-    $_SESSION['user_id'] = $user['id'];
-    $_SESSION['role'] = $user['role'];
-    echo json_encode([
-        "status" => "success",
-        "message" => "Login successful",
-        "user" => [
-            "id" => $user['id'],
-            "name" => $user['name'],
-            "email" => $user['email'],
-            "role" => $user['role']
-        ]
-    ]);
+if ($id && password_verify($password, $hashed)) {
+    echo json_encode(["message" => "Login successful", "user_id" => $id, "username" => $username]);
 } else {
-    echo json_encode(["status" => "error", "message" => "Invalid credentials"]);
+    http_response_code(401);
+    echo json_encode(["error" => "Invalid credentials"]);
 }
 ?>
